@@ -12,6 +12,7 @@ from torchvision import transforms, datasets
 import lightning as L
 import timm
 # import os
+from torch.optim.lr_scheduler import StepLR
 
 import pytorch_lightning as pl
 # your favorite machine learning tracking tool
@@ -219,8 +220,14 @@ class LitModel(pl.LightningModule):
         self.test_output = output
     
     def configure_optimizers(self):
-        return torch.optim.SGD(self.parameters(), lr=self.learning_rate)
-
+        # return torch.optim.SGD(self.parameters(), lr=self.learning_rate)
+        optimizer = optim.SGD(self.model.parameters(), lr=0.1, momentum=0.9, weight_decay=1e-4)
+        scheduler = StepLR(optimizer, step_size=30, gamma=0.1)
+        return {
+            'optimizer': optimizer,
+            'lr_scheduler': scheduler,
+            'monitor': 'val_loss'  # 适用于 ReduceLROnPlateau
+        }
 
 # # 设置 TensorBoardLogger
 # logger = TensorBoardLogger("logs", name="TransferLearning")
