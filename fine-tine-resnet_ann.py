@@ -29,60 +29,13 @@ from torchvision import transforms
 # from torchvision.datasets import StanfordCars
 # from torchvision.datasets.utils import download_url
 import torchvision.models as models
-from pytorch_lightning.loggers import TensorBoardLogger
+# from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import CSVLogger
-
+from utils.pl_data_loader import StanfordCarsDataModule
 ## python fine-tine-resnet_ann.py --batch_size 64 --learning_rate 0.1 --input_size 300 --train_dir '../data/cars/train' --test_dir '../data/cars/test' --resnet_scale '50' --max_epochs 150  --checkpoint_dir 'logs' --num_classes 196 --is_distributed  --is_transfer
 
 ## fine-tune resnet
-class StanfordCarsDataModule(pl.LightningDataModule):
-    def __init__(self, batch_size, train_dir: str = './',test_dir: str = './',input_size:int=300,num_class:int = 196):
-        super().__init__()
-        # self.data_dir = data_dir
-        self.train_dir = train_dir
-        self.test_dir = test_dir
-        self.batch_size = batch_size
-        self.input_size = input_size
-        self.num_classes = num_class
-
-        # Augmentation policy for training set
-        self.augmentation = transforms.Compose([
-              transforms.RandomResizedCrop(size=self.input_size, scale=(0.8, 1.0)),
-              transforms.RandomRotation(degrees=15),
-              transforms.RandomHorizontalFlip(),
-              transforms.CenterCrop(size=self.input_size),
-              transforms.ToTensor(),
-              transforms.Normalize([0.485, 0.456, 0.406],[0.229, 0.224, 0.225])
-        ])
-        # Preprocessing steps applied to validation and test set.
-        self.transform = transforms.Compose([
-            transforms.Resize(self.input_size),
-            transforms.CenterCrop(self.input_size),
-            transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406],[0.229, 0.224, 0.225])
-        ])
-        
-        # self.num_classes = 196
-
-    def prepare_data(self):
-        pass
-
-    def setup(self, stage=None):
-        # build dataset '../data/cars/train'
-        self.train = datasets.ImageFolder(root=self.train_dir, transform=self.augmentation)
-        self.test = datasets.ImageFolder(root=self.test_dir, transform=self.transform)
-        
-    def train_dataloader(self):
-        return DataLoader(self.train, batch_size=self.batch_size, shuffle=True, num_workers=14)
-
-    def val_dataloader(self):
-        return DataLoader(self.test, batch_size=self.batch_size, num_workers=14)
-
-    def test_dataloader(self):
-        return DataLoader(self.test, batch_size=self.batch_size, num_workers=14)
-
-
 class LitModel(pl.LightningModule):
     def __init__(self, num_classes, learning_rate=0.1, transfer=True,resnet_scale:str = '50'):
         super().__init__()
@@ -227,7 +180,7 @@ def main():
         verbose=True,                # 输出日志
         filename="best_model"        # 文件名
     )
-    ## 1
+
     dm = StanfordCarsDataModule(batch_size=args.batch_size, train_dir=args.train_dir, test_dir=args.test_dir, input_size=args.input_size)
     model = LitModel(num_classes=args.num_classes, transfer=args.is_transfer, learning_rate=args.learning_rate, resnet_scale=args.resnet_scale)
     if args.is_distributed:
@@ -239,3 +192,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+## python fine-tine-resnet_ann.py --batch_size 64 --learning_rate 0.1 --input_size 300 --train_dir '../data/cars/train' --test_dir '../data/cars/test' --resnet_scale '50' --max_epochs 200  --checkpoint_dir 'logs' --num_classes 196 --is_distributed  --is_transfer

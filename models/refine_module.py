@@ -24,4 +24,3 @@ class FeatureRefine(nn.Module):
         y1,y2,vae_loss = self.forward(feature_maps,out)
         critien = nn.CrossEntropyLoss()
         return critien(y,y1) + critien(y,y2) + vae_loss
-    
