@@ -22,7 +22,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 from torch.utils.data import random_split, DataLoader
-
+from torch.optim.lr_scheduler import CosineAnnealingLR
 from torchmetrics import Accuracy
 
 from torchvision import transforms
@@ -41,10 +41,10 @@ class StanfordCarsDataModule(pl.LightningDataModule):
 
         # Augmentation policy for training set
         self.augmentation = transforms.Compose([
-              transforms.RandomResizedCrop(size=224, scale=(0.8, 1.0)),
+              transforms.RandomResizedCrop(size=300, scale=(0.8, 1.0)),
               transforms.RandomRotation(degrees=15),
               transforms.RandomHorizontalFlip(),
-              transforms.CenterCrop(size=224),
+              transforms.CenterCrop(size=300),
               transforms.ToTensor(),
               transforms.Normalize([0.485, 0.456, 0.406],[0.229, 0.224, 0.225])
         ])
@@ -53,8 +53,8 @@ class StanfordCarsDataModule(pl.LightningDataModule):
               # transforms.Resize(size=224),
               # # transforms.CenterCrop(size=224),
               # transforms.ToTensor(),
-            transforms.Resize(224),
-            transforms.CenterCrop(224),
+            transforms.Resize(300),
+            transforms.CenterCrop(300),
             transforms.ToTensor(),
             transforms.Normalize([0.485, 0.456, 0.406],[0.229, 0.224, 0.225])
         ])
@@ -100,7 +100,7 @@ class LitModel(pl.LightningModule):
 
         
         # transfer learning if pretrained=True
-        self.feature_extractor = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
+        self.feature_extractor = models.resnet101(weights=models.ResNet101_Weights.IMAGENET1K_V1)
         # self.feature_extractor = timm.create_model("resnet50", pretrained=True)
         in_features = self.feature_extractor.fc.in_features
         self.feature_extractor.fc = nn.Linear(in_features, num_classes)
@@ -221,8 +221,9 @@ class LitModel(pl.LightningModule):
     
     def configure_optimizers(self):
         # return torch.optim.SGD(self.parameters(), lr=self.learning_rate)
-        optimizer = optim.SGD(self.model.parameters(), lr=0.1, momentum=0.9, weight_decay=1e-4)
-        scheduler = StepLR(optimizer, step_size=30, gamma=0.1)
+        optimizer = optim.SGD(self.parameters(), lr=self.learning_rate)
+        # scheduler = StepLR(optimizer, step_size=30, gamma=0.1)
+        scheduler = CosineAnnealingLR(optimizer, T_max=self.trainer.max_epochs, eta_min=0)
         return {
             'optimizer': optimizer,
             'lr_scheduler': scheduler,
@@ -233,7 +234,7 @@ class LitModel(pl.LightningModule):
 # logger = TensorBoardLogger("logs", name="TransferLearning")
 from pytorch_lightning.loggers import CSVLogger
 
-logger = CSVLogger("logs", name="fine_tune_resnet50")
+logger = CSVLogger("logs", name="fine_tune_resnet101")
 
 checkpoint_callback = ModelCheckpoint(
     monitor="val/acc",           # 监控验证集准确率
@@ -242,11 +243,12 @@ checkpoint_callback = ModelCheckpoint(
     verbose=True,                # 输出日志
     filename="best_model"        # 文件名
 )
+## 1
 
-dm = StanfordCarsDataModule(batch_size=128)
-model = LitModel((3, 224, 224), 196, transfer=True)
+dm = StanfordCarsDataModule(batch_size=64)
+model = LitModel((3, 300, 300), 196, transfer=True)
 ## strategy="ddp", num_nodes=4
-trainer = pl.Trainer(logger=logger, max_epochs=400, accelerator="gpu",callbacks=[checkpoint_callback],strategy="ddp")
+trainer = pl.Trainer(logger=logger, max_epochs=150, accelerator="gpu",callbacks=[checkpoint_callback],strategy="ddp")
 
 trainer.fit(model, dm)
 print("end....")
