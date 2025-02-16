@@ -91,16 +91,16 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class VAEncoder(nn.Module):
-    def __init__(self, input_dim, latent_dim):
+    def __init__(self, input_dim, latent_dim,dim_dot=1):
         super(VAEncoder, self).__init__()
         
         # 编码器的全连接层
         self.fc1 = nn.Linear(input_dim, 512)  # 输入维度是 batch, dim
-        self.fc2 = nn.Linear(512, 256)
+        self.fc2 = nn.Linear(512, 512)
         
         # 平均和对数方差（用于计算潜在变量的分布）
-        self.fc_mean = nn.Linear(256, latent_dim)  # 均值
-        self.fc_log_var = nn.Linear(256, latent_dim)  # 对数方差
+        self.fc_mean = nn.Linear(512, latent_dim)  # 均值
+        self.fc_log_var = nn.Linear(512, latent_dim)  # 对数方差
         
     def forward(self, x):
         # 通过全连接层 + 激活函数
@@ -115,12 +115,12 @@ class VAEncoder(nn.Module):
     
 
 class VADecoder(nn.Module):
-    def __init__(self, output_dim, latent_dim):
+    def __init__(self, output_dim, latent_dim,dim_dot=1):
         super(VADecoder, self).__init__()
         
         # 解码器的全连接层
-        self.fc1 = nn.Linear(latent_dim, 256)
-        self.fc2 = nn.Linear(256, 512)
+        self.fc1 = nn.Linear(latent_dim, 512)
+        self.fc2 = nn.Linear(512, 512)
         self.fc3 = nn.Linear(512, output_dim)  # 输出维度是 dim
 
     def forward(self, z):
@@ -132,10 +132,10 @@ class VADecoder(nn.Module):
         return x
 
 class RVAE(nn.Module):
-    def __init__(self, input_dim, output_dim, latent_dim):
+    def __init__(self, input_dim, output_dim, latent_dim,dim_dot=1):
         super(RVAE, self).__init__()
-        self.encoder = VAEncoder(input_dim, latent_dim)
-        self.decoder = VADecoder(output_dim, latent_dim)
+        self.encoder = VAEncoder(input_dim, latent_dim,dim_dot)
+        self.decoder = VADecoder(output_dim, latent_dim,dim_dot)
 
     def reparameterize(self, mean, log_var):
         std = torch.exp(0.5 * log_var)
@@ -150,6 +150,6 @@ class RVAE(nn.Module):
 
     def get_rec_loss(self, x, r=0.5):
         reconstructed_x, mean, log_var = self.forward(x)
-        reconstruction_loss = F.mse_loss(reconstructed_x, x, reduction='sum')
+        reconstruction_loss = F.mse_loss(reconstructed_x, x, reduction='mean')
         kl_loss = -0.5 * torch.sum(1 + log_var - mean.pow(2) - log_var.exp())
         return reconstructed_x,r * reconstruction_loss + kl_loss

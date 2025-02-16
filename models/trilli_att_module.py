@@ -2,51 +2,61 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
 class TrilinearAttention(nn.Module):
-    def __init__(self, target_height, target_width, mid_channel,input_layers=4):
+    def __init__(self, target_height, target_width, mid_channel, input_layers=4, channel_dot=1):
         super(TrilinearAttention, self).__init__()
         self.target_height = target_height
         self.target_width = target_width
         self.mid_channel = mid_channel  # 目标降维的通道数
-        in_channel = [((2)**i)*64 for i in range(input_layers)]
-        # print(in_channel)
+        in_channel = [((2) ** i) * (64 * channel_dot) for i in range(input_layers)]
+        
         # 1x1 卷积层用于降维
-        self.channel_reduction = nn.Conv2d(in_channels=sum(in_channel), out_channels=self.mid_channel, kernel_size=1, stride=1, padding=0)
+        self.channel_reduction = nn.Conv2d(
+            in_channels=sum(in_channel),
+            out_channels=self.mid_channel,
+            kernel_size=1,
+            stride=1,
+            padding=0
+        )
 
     def forward(self, feature_maps):
-        """
-        feature_maps: 输入的多个特征图列表，每个特征图的形状为 [batch, channels, height, width]
-        输出: 经过三线性注意力调整后的融合特征图，形状为 [batch, mid_channel, target_height, target_width]
-        """
+        # 确保所有 feature_maps 都有梯度
+        feature_maps = [f_map.requires_grad_() for f_map in feature_maps]
+
         # 1. 统一所有特征图的空间尺寸
-        resized_maps = [F.interpolate(f_map, size=(self.target_height, self.target_width), mode='bilinear', align_corners=False)
-                        for f_map in feature_maps]
-        
+        resized_maps = [F.interpolate(f_map, size=(self.target_height, self.target_width),
+                                      mode='bilinear', align_corners=True) for f_map in feature_maps]
+
         # 2. 在通道维度上拼接
-        combined_map = torch.cat(resized_maps, dim=1)  # [batch, total_channels, target_height, target_width]
-        # print("Before reduction:", combined_map.shape)
-
-        # 3. 使用 1x1 卷积降维到 mid_channel
+        combined_map = torch.cat(resized_maps, dim=1)
+        
+        # 3. 使用 1x1 卷积降维
         reduced_map = self.channel_reduction(combined_map)
-        # print("After reduction:", reduced_map.shape)
-
+        
         # 4. 获取合并后的特征图的维度信息
         batch, total_channels, height, width = reduced_map.shape
-        hw = height * width  # 扁平化的空间维度
+        hw = height * width
 
-        # 5. 重塑为 [batch, total_channels, hw] 以进行计算
+        # 5. 重塑为 [batch, total_channels, hw]
         reduced_map_reshaped = reduced_map.view(batch, total_channels, hw)
 
-        # 6. 计算通道关系矩阵 XX^T  -> 形状 [batch, total_channels, total_channels]
+        # 6. 计算通道关系矩阵并防止梯度消失
         channel_relation = torch.bmm(reduced_map_reshaped, reduced_map_reshaped.transpose(1, 2))
+        channel_relation = F.softmax(channel_relation, dim=-1)  # 归一化
 
-        # 7. 计算三线性注意力图 -> 形状 [batch, total_channels, hw]
+        # 7. 计算三线性注意力图
         attention_map = torch.bmm(channel_relation, reduced_map_reshaped)
+        attention_map = F.leaky_relu(attention_map, negative_slope=0.1)  # 防止梯度消失
 
-        # 8. 重新恢复到原始空间尺寸 -> 形状 [batch, total_channels, height, width]
+        # 8. 重新恢复到原始空间尺寸
         output = attention_map.view(batch, total_channels, height, width)
 
         return output
+
 
 class FeatureCompression(nn.Module):
     def __init__(self, in_channels, mid_channels=512, target_size=13):
@@ -70,7 +80,7 @@ class FeatureCompression(nn.Module):
 
 
 class TrilliAttModules(nn.Module):
-    def __init__(self, target_height, target_width, mid_channel, input_layers=4, compression_out_channels=512, compression_target_size=1):
+    def __init__(self, target_height, target_width, mid_channel, input_layers=4, compression_out_channels=512, compression_target_size=1,channel_dot=1):
         """
         组合 TrilinearAttention 和 FeatureCompression 的模块
         :param target_height: 目标特征图高度 (用于 TrilinearAttention)
@@ -81,9 +91,12 @@ class TrilliAttModules(nn.Module):
         :param compression_target_size: FeatureCompression 最终输出的空间大小 (默认为 1，即 1x1)
         """
         super(TrilliAttModules, self).__init__()
-
+        compression_out_channels = compression_out_channels * channel_dot
+        
+        mid_channel = mid_channel * channel_dot
+        # print('mid_channel',mid_channel,'compression_out_channels',compression_out_channels)
         # Trilinear Attention 模块
-        self.trilinear_attention = TrilinearAttention(target_height, target_width, mid_channel, input_layers)
+        self.trilinear_attention = TrilinearAttention(target_height, target_width, mid_channel, input_layers,channel_dot=channel_dot)
 
         # Feature Compression 模块
         self.feature_compression = FeatureCompression(in_channels=mid_channel, mid_channels=compression_out_channels, target_size=compression_target_size)
@@ -98,7 +111,7 @@ class TrilliAttModules(nn.Module):
         """
         # Step 1: 计算三线性注意力融合的特征图
         attention_map = self.trilinear_attention(feature_maps)
-
+        # print(attention_map.shape)
         # Step 2: 进行特征压缩，得到最终的 1x1 特征
         compressed_feature = self.feature_compression(attention_map)
 
