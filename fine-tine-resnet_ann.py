@@ -17,7 +17,7 @@ from torch.optim.lr_scheduler import StepLR
 import pytorch_lightning as pl
 # your favorite machine learning tracking tool
 from pytorch_lightning.loggers import WandbLogger
-
+import argparse
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -31,52 +31,47 @@ from torchvision import transforms
 import torchvision.models as models
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.loggers import CSVLogger
 
+## python fine-tine-resnet_ann.py --batch_size 64 --learning_rate 0.1 --input_size 300 --train_dir '../data/cars/train' --test_dir '../data/cars/test' --resnet_scale '50' --max_epochs 150  --checkpoint_dir 'logs' --num_classes 196 --is_distributed  --is_transfer
 
+## fine-tune resnet
 class StanfordCarsDataModule(pl.LightningDataModule):
-    def __init__(self, batch_size, data_dir: str = './'):
+    def __init__(self, batch_size, train_dir: str = './',test_dir: str = './',input_size:int=300,num_class:int = 196):
         super().__init__()
-        self.data_dir = data_dir
+        # self.data_dir = data_dir
+        self.train_dir = train_dir
+        self.test_dir = test_dir
         self.batch_size = batch_size
+        self.input_size = input_size
+        self.num_classes = num_class
 
         # Augmentation policy for training set
         self.augmentation = transforms.Compose([
-              transforms.RandomResizedCrop(size=300, scale=(0.8, 1.0)),
+              transforms.RandomResizedCrop(size=self.input_size, scale=(0.8, 1.0)),
               transforms.RandomRotation(degrees=15),
               transforms.RandomHorizontalFlip(),
-              transforms.CenterCrop(size=300),
+              transforms.CenterCrop(size=self.input_size),
               transforms.ToTensor(),
               transforms.Normalize([0.485, 0.456, 0.406],[0.229, 0.224, 0.225])
         ])
         # Preprocessing steps applied to validation and test set.
         self.transform = transforms.Compose([
-              # transforms.Resize(size=224),
-              # # transforms.CenterCrop(size=224),
-              # transforms.ToTensor(),
-            transforms.Resize(300),
-            transforms.CenterCrop(300),
+            transforms.Resize(self.input_size),
+            transforms.CenterCrop(self.input_size),
             transforms.ToTensor(),
             transforms.Normalize([0.485, 0.456, 0.406],[0.229, 0.224, 0.225])
         ])
         
-        self.num_classes = 196
+        # self.num_classes = 196
 
     def prepare_data(self):
         pass
 
     def setup(self, stage=None):
-        # build dataset
-        self.train = datasets.ImageFolder(root='../data/cars/train', transform=self.augmentation)
-        # split dataset
-        # self.train, self.val = random_split(dataset, [6500, 1644])
-
-        # self.test = StanfordCars(root=self.data_dir, download=True, split="test")
-        
-        self.test = datasets.ImageFolder(root='../data/cars/test', transform=self.transform)
-
-        # self.train.dataset.transform = self.augmentation
-        # self.val.dataset.transform = self.transform
-        # self.test.dataset.transform = self.transform
+        # build dataset '../data/cars/train'
+        self.train = datasets.ImageFolder(root=self.train_dir, transform=self.augmentation)
+        self.test = datasets.ImageFolder(root=self.test_dir, transform=self.transform)
         
     def train_dataloader(self):
         return DataLoader(self.train, batch_size=self.batch_size, shuffle=True, num_workers=14)
@@ -89,68 +84,40 @@ class StanfordCarsDataModule(pl.LightningDataModule):
 
 
 class LitModel(pl.LightningModule):
-    def __init__(self, input_shape, num_classes, learning_rate=0.1, transfer=True):
+    def __init__(self, num_classes, learning_rate=0.1, transfer=True,resnet_scale:str = '50'):
         super().__init__()
         
-        # log hyperparameters
         self.save_hyperparameters()
         self.learning_rate = learning_rate
-        self.dim = input_shape
         self.num_classes = num_classes
-
         
-        # transfer learning if pretrained=True
-        self.feature_extractor = models.resnet101(weights=models.ResNet101_Weights.IMAGENET1K_V1)
-        # self.feature_extractor = timm.create_model("resnet50", pretrained=True)
+        ## 
+        if resnet_scale == '18':
+            if transfer:
+                self.feature_extractor = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
+            else:
+                self.feature_extractor = models.resnet18(weights=None)
+        elif resnet_scale == '50':
+            if transfer:
+                self.feature_extractor = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
+            else:
+                self.feature_extractor = models.resnet50(weights=None)
+        elif resnet_scale == '101':
+            if transfer:
+                self.feature_extractor = models.resnet101(weights=models.ResNet101_Weights.IMAGENET1K_V1)
+            else:
+                self.feature_extractor = models.resnet101(weights=None)
+        elif resnet_scale == '34':
+            if transfer:
+                self.feature_extractor = models.resnet34(weights=models.ResNet34_Weights.IMAGENET1K_V1)
+            else:
+                self.feature_extractor = models.resnet34(weights=None)
+            
         in_features = self.feature_extractor.fc.in_features
         self.feature_extractor.fc = nn.Linear(in_features, num_classes)
-        # self.feature_extractor.torch.load(model_path, map_location="cpu")
-        # 加载权重
-        # model_path = 's_cars_pytorch_model.bin'
-        # state_dict = torch.load(model_path)
-        # self.feature_extractor.load_state_dict(state_dict)
-        # self.feature_extractor.fc = nn.Identity()
-        # for name, param in self.feature_extractor.named_parameters():
-        #     if "fc" not in name:  # 冻结所有非 fc 层的参数
-        #         param.requires_grad = False
-
         self.classifier = nn.Identity()
-        # self.classifier = nn.Sequential(
-        # #     Dense(1024, activation = 'relu'),
-        # # Dropout(0.25),
-        # # Dense(512, activation = 'relu'),
-        # # Dropout(0.25),
-        # # Dense(196, activation = 'softmax')
-        #     nn.Linear(in_features, 1024),
-        #     nn.ReLU(),
-        #     nn.Dropout(0.25),
-        #     nn.Linear(1024, 512),
-        #     nn.ReLU(),
-        #     nn.Dropout(0.25),
-        #     nn.Linear(512, num_classes),
-        #     # nn.ReLU(),
-            
-        #     # nn.Linear(512, num_classes)
-        # )
-        # self.classifier = nn.Sequential(
-        #     nn.Linear(in_features, 512),  # 先降维
-        #     nn.ReLU(),                    # 加入激活函数
-        #     nn.Dropout(p=0.2),    # 防止过拟合
-        #     nn.Linear(512, num_classes)    # 输出类别
-        # )
-        # if transfer:
-        #     # layers are frozen by using eval()
-        #     self.feature_extractor.eval()
-        #     # freeze params
-        #     for param in self.feature_extractor.parameters():
-        #         param.requires_grad = False
-        
-        # n_sizes = self._get_conv_output(input_shape)
-
-        
-
         self.criterion = nn.CrossEntropyLoss()
-        self.accuracy = Accuracy(task="multiclass",num_classes=196)
+        self.accuracy = Accuracy(task="multiclass",num_classes=self.num_classes)
   
     # returns the size of the output tensor going into the Linear layer from the conv block.
     def _get_conv_output(self, shape):
@@ -227,28 +194,48 @@ class LitModel(pl.LightningModule):
         return {
             'optimizer': optimizer,
             'lr_scheduler': scheduler,
-            'monitor': 'val_loss'  # 适用于 ReduceLROnPlateau
+            'monitor': 'val_loss'
         }
 
 # # 设置 TensorBoardLogger
-# logger = TensorBoardLogger("logs", name="TransferLearning")
-from pytorch_lightning.loggers import CSVLogger
 
-logger = CSVLogger("logs", name="fine_tune_resnet101")
+def parse_args():
+    parser = argparse.ArgumentParser(description="Train a ResNet model on Stanford Cars")
+    parser.add_argument('--batch_size', type=int, default=64, help="Batch size for training")
+    parser.add_argument('--learning_rate', type=float, default=0.1, help="Learning rate")
+    parser.add_argument('--input_size', type=int, default=300, help="Input size for images")
+    parser.add_argument('--train_dir', type=str, default='./train', help="Directory for training data")
+    parser.add_argument('--test_dir', type=str, default='./test', help="Directory for testing data")
+    parser.add_argument('--resnet_scale', type=str, default='50', choices=['18', '34', '50', '101'], help="ResNet scale")
+    parser.add_argument('--max_epochs', type=int, default=150, help="Number of epochs for training")
+    parser.add_argument('--checkpoint_dir', type=str, default="logs", help="Directory to save checkpoints")
+    parser.add_argument('--num_classes', type=int, default=196, help="classificer classes")
+    parser.add_argument('--is_distributed', action='store_true', help="Enable distributed training")
+    parser.add_argument('--is_transfer', action='store_true', help="Enable distributed training")
+    return parser.parse_args()
 
-checkpoint_callback = ModelCheckpoint(
-    monitor="val/acc",           # 监控验证集准确率
-    mode="max",                  # 追踪最大值
-    save_top_k=1,                # 保存最佳模型
-    verbose=True,                # 输出日志
-    filename="best_model"        # 文件名
-)
-## 1
 
-dm = StanfordCarsDataModule(batch_size=64)
-model = LitModel((3, 300, 300), 196, transfer=True)
-## strategy="ddp", num_nodes=4
-trainer = pl.Trainer(logger=logger, max_epochs=150, accelerator="gpu",callbacks=[checkpoint_callback],strategy="ddp")
+def main():
+    args = parse_args()
+    logger_name = f"fine_tune_resnet{args.resnet_scale}"
+    logger = CSVLogger(args.checkpoint_dir, name=logger_name)
 
-trainer.fit(model, dm)
-print("end....")
+    checkpoint_callback = ModelCheckpoint(
+        monitor="val/acc",           # 监控验证集准确率
+        mode="max",                  # 追踪最大值
+        save_top_k=1,                # 保存最佳模型
+        verbose=True,                # 输出日志
+        filename="best_model"        # 文件名
+    )
+    ## 1
+    dm = StanfordCarsDataModule(batch_size=args.batch_size, train_dir=args.train_dir, test_dir=args.test_dir, input_size=args.input_size)
+    model = LitModel(num_classes=args.num_classes, transfer=args.is_transfer, learning_rate=args.learning_rate, resnet_scale=args.resnet_scale)
+    if args.is_distributed:
+        trainer = pl.Trainer(logger=logger, max_epochs=args.max_epochs, accelerator="gpu",callbacks=[checkpoint_callback],strategy="ddp")
+    else:
+        trainer = pl.Trainer(logger=logger, max_epochs=args.max_epochs, accelerator="gpu",callbacks=[checkpoint_callback])
+    trainer.fit(model, dm)
+    print("end....")
+
+if __name__ == "__main__":
+    main()
