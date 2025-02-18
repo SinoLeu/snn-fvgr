@@ -44,8 +44,8 @@ class StanfordCarsDataModule(pl.LightningDataModule):
         self.test = datasets.ImageFolder(root=self.test_dir, transform=self.transform)
         
     def train_dataloader(self):
-        refine_dataset  = ConcatDataset([self.train,self.test])
-        return DataLoader(refine_dataset, batch_size=self.batch_size, shuffle=True, num_workers=14)
+        
+        return DataLoader(self.train, batch_size=self.batch_size, shuffle=True, num_workers=14)
 
     def val_dataloader(self):
         return DataLoader(self.test, batch_size=self.batch_size, num_workers=14)
@@ -94,7 +94,9 @@ class StanfordCarsDataRefineModule(pl.LightningDataModule):
         self.test = datasets.ImageFolder(root=self.test_dir, transform=self.transform)
         
     def train_dataloader(self):
-        return DataLoader(self.train, batch_size=self.batch_size, shuffle=True, num_workers=14)
+        # refine_dataset  = ConcatDataset([self.train,self.test])
+        refine_dataset  = ConcatDataset([self.train])
+        return DataLoader(refine_dataset, batch_size=self.batch_size, shuffle=True, num_workers=14)
 
     def val_dataloader(self):
         return DataLoader(self.test, batch_size=self.batch_size, num_workers=14)

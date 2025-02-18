@@ -33,7 +33,7 @@ import torchvision.models as models
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import CSVLogger
 from utils.pl_data_loader import StanfordCarsDataRefineModule
-from models.refine_module import FeatureRefine
+from models.refine_module import FeatureRefine_RVAE
 
 
 def remove_prefix_from_state_dict(state_dict, prefix="feature_extractor."):
@@ -99,17 +99,12 @@ class LitModel(pl.LightningModule):
         self.feature_extractor.load_state_dict(best_model['state_dict'])
         # self.feature_extractor.fc = nn.Identity()
         self.feature_extractor.eval()
+        ## 冻结 `feature_extractor`
         freeze_model(self.feature_extractor)
-        self.refine_block = FeatureRefine(class_nums=num_classes,channel_dot=channel_dot)
+        self.refine_block_vae = FeatureRefine_RVAE(class_nums=num_classes,channel_dot=channel_dot)
         self.classifier = nn.Identity()
         self.criterion = nn.CrossEntropyLoss()
         self.accuracy = Accuracy(task="multiclass",num_classes=self.num_classes)
-        
-        # if train_component == 'att':
-        #     self.refine_block.rvae.eval()
-        # elif train_component == 'vae':
-        #     self.refine_block.trilli_att_module.eval()
-        # self.train_component = train_component
     # returns the size of the output tensor going into the Linear layer from the conv block.
     def _get_conv_output(self, shape):
         batch_size = 1
@@ -132,24 +127,14 @@ class LitModel(pl.LightningModule):
     
     def training_step(self, batch):
         batch, gt = batch[0], batch[1]
-        out,mid_out = self.forward(batch)
-        feature_maps = mid_out[:4]
+        _,mid_out = self.forward(batch)
+        # feature_maps = mid_out[:4]
         out = mid_out[-1]
-        y1,y2,vae_loss = self.refine_block(feature_maps,out)
-        current_epoch = self.current_epoch
-        loss = self.refine_block.get_fr_loss(gt,y1,y2,vae_loss,current_epoch)
-        # loss = self.criterion(out, gt)
+        y2,vae_loss = self.refine_block_vae(out)
+        loss = self.refine_block_vae.get_rvae_loss(gt,y2,vae_loss)
         self.log("train/loss", loss)
-        acc_y1 = self.accuracy(y1, gt)
-        self.log("train/y1_acc", acc_y1)
         acc_y2 = self.accuracy(y2, gt)
-        self.log("train/y2_acc", acc_y2)
-        # if self.train_component == 'att':
-        #     acc_y1 = self.accuracy(y1, gt)
-        #     self.log("train/y1_acc", acc_y1)
-        # else:
-        #     acc_y2 = self.accuracy(y2, gt)
-        #     self.log("train/y2_acc", acc_y2)
+        self.log("train/rvae_acc", acc_y2)
 
         return loss
     
@@ -159,24 +144,11 @@ class LitModel(pl.LightningModule):
         out,mid_out = self.forward(batch)
         feature_maps = mid_out[:4]
         out = mid_out[-1]
-        y1,y2,vae_loss = self.refine_block(feature_maps,out)
-        current_epoch = self.current_epoch
-        loss = self.refine_block.get_fr_loss(gt,y1,y2,vae_loss,current_epoch)
-        
+        y2,vae_loss = self.refine_block_vae(out)
+        loss = self.refine_block_vae.get_rvae_loss(gt,y2,vae_loss)
         self.log("val/loss", loss)
-        acc_y1 = self.accuracy(y1, gt)
         acc_y2 = self.accuracy(y2, gt)
-        self.log("val/acc", acc_y1)
-        self.log("val/acc", acc_y2)
-        # if self.train_component == 'att':
-        #     acc_y1 = self.accuracy(y1, gt)
-        #     self.log("val/acc", acc_y1)
-        # elif self.train_component == 'vae':
-        #     acc_y2 = self.accuracy(y2, gt)
-        #     self.log("val/acc", acc_y2)
-        self.log("val/vae_loss", vae_loss)
-        # loss = self.criterion(out, gt)
-        
+        self.log("val/rvae_acc", acc_y2)
         # acc = self.accuracy(out, gt)
         # self.log("val/acc", acc)
         return loss
@@ -234,7 +206,7 @@ def parse_args():
 
 def main():
     args = parse_args()
-    logger_name = f"refine_resnet{args.resnet_scale}"
+    logger_name = f"refine_resnet{args.resnet_scale}-rvae"
     logger = CSVLogger(args.checkpoint_dir, name=logger_name)
 
     checkpoint_callback = ModelCheckpoint(

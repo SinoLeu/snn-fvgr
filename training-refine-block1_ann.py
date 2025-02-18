@@ -33,7 +33,8 @@ import torchvision.models as models
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import CSVLogger
 from utils.pl_data_loader import StanfordCarsDataRefineModule
-from models.refine_module import FeatureRefine
+from models.refine_module import FeatureRefine,FeatureRefine_Att,FeatureRefine_RVAE
+# from models.trilli_att_module import TrilliAttModules
 
 
 def remove_prefix_from_state_dict(state_dict, prefix="feature_extractor."):
@@ -58,7 +59,7 @@ def freeze_model(model: nn.Module):
     return model
 
 class LitModel(pl.LightningModule):
-    def __init__(self, num_classes, learning_rate=0.1, transfer=True,resnet_scale:str = '50',load_checkpoints_path:str="./logs/fine_tune_resnet50/version_8/checkpoints/best_model.ckpt",train_component:str='att'):
+    def __init__(self, num_classes, learning_rate=0.1, transfer=True,resnet_scale:str = '50',load_checkpoints_path:str="./logs/fine_tune_resnet50/version_8/checkpoints/best_model.ckpt",backbone_forzen:bool=False):
         super().__init__()
         
         self.save_hyperparameters()
@@ -97,19 +98,18 @@ class LitModel(pl.LightningModule):
         
         best_model['state_dict'] = remove_prefix_from_state_dict(best_model['state_dict'])
         self.feature_extractor.load_state_dict(best_model['state_dict'])
+        
         # self.feature_extractor.fc = nn.Identity()
-        self.feature_extractor.eval()
-        freeze_model(self.feature_extractor)
-        self.refine_block = FeatureRefine(class_nums=num_classes,channel_dot=channel_dot)
-        self.classifier = nn.Identity()
+        # self.backbone_forzen = backbone_forzen
+        if backbone_forzen:
+            self.feature_extractor.eval()
+            freeze_model(self.feature_extractor)
+        # self.refine_block = FeatureRefine(class_nums=num_classes,channel_dot=channel_dot)
+        self.feature_refine_att = FeatureRefine_Att(class_nums=num_classes,channel_dot=channel_dot)
+        # self.classifier = nn.Identity()
         self.criterion = nn.CrossEntropyLoss()
         self.accuracy = Accuracy(task="multiclass",num_classes=self.num_classes)
         
-        # if train_component == 'att':
-        #     self.refine_block.rvae.eval()
-        # elif train_component == 'vae':
-        #     self.refine_block.trilli_att_module.eval()
-        # self.train_component = train_component
     # returns the size of the output tensor going into the Linear layer from the conv block.
     def _get_conv_output(self, shape):
         batch_size = 1
@@ -132,53 +132,43 @@ class LitModel(pl.LightningModule):
     
     def training_step(self, batch):
         batch, gt = batch[0], batch[1]
-        out,mid_out = self.forward(batch)
+        pred_y,mid_out = self.forward(batch)
         feature_maps = mid_out[:4]
-        out = mid_out[-1]
-        y1,y2,vae_loss = self.refine_block(feature_maps,out)
-        current_epoch = self.current_epoch
-        loss = self.refine_block.get_fr_loss(gt,y1,y2,vae_loss,current_epoch)
-        # loss = self.criterion(out, gt)
+        # out = mid_out[-1]
+        y1 = self.feature_refine_att(feature_maps)
+        loss = self.feature_refine_att.get_att_loss(gt,y1) + self.criterion(pred_y,gt)
+        # loss = loss + self.criterion(gt,pred_y)
+            
+        # y1,y2,vae_loss = self.refine_block(feature_maps,out)
+        # current_epoch = self.current_epoch
+        # loss = self.refine_block.get_fr_loss(gt,y1,y2,vae_loss,current_epoch)
+        # # loss = self.criterion(out, gt)
         self.log("train/loss", loss)
         acc_y1 = self.accuracy(y1, gt)
-        self.log("train/y1_acc", acc_y1)
-        acc_y2 = self.accuracy(y2, gt)
-        self.log("train/y2_acc", acc_y2)
-        # if self.train_component == 'att':
-        #     acc_y1 = self.accuracy(y1, gt)
-        #     self.log("train/y1_acc", acc_y1)
-        # else:
-        #     acc_y2 = self.accuracy(y2, gt)
-        #     self.log("train/y2_acc", acc_y2)
+        self.log("train/att_acc", acc_y1)
 
         return loss
     
     def validation_step(self, batch, batch_idx):
         batch, gt = batch[0], batch[1]
         # out = self.feature_extractor(batch)
-        out,mid_out = self.forward(batch)
+        pred_y,mid_out = self.forward(batch)
         feature_maps = mid_out[:4]
-        out = mid_out[-1]
-        y1,y2,vae_loss = self.refine_block(feature_maps,out)
-        current_epoch = self.current_epoch
-        loss = self.refine_block.get_fr_loss(gt,y1,y2,vae_loss,current_epoch)
+        # out = mid_out[-1]
+        y1 = self.feature_refine_att(feature_maps)
+        loss = self.feature_refine_att.get_att_loss(gt,y1) + self.criterion(pred_y,gt)
+        acc_y1 = self.accuracy(y1, gt)
         
         self.log("val/loss", loss)
-        acc_y1 = self.accuracy(y1, gt)
-        acc_y2 = self.accuracy(y2, gt)
         self.log("val/acc", acc_y1)
-        self.log("val/acc", acc_y2)
-        # if self.train_component == 'att':
-        #     acc_y1 = self.accuracy(y1, gt)
-        #     self.log("val/acc", acc_y1)
-        # elif self.train_component == 'vae':
-        #     acc_y2 = self.accuracy(y2, gt)
-        #     self.log("val/acc", acc_y2)
-        self.log("val/vae_loss", vae_loss)
-        # loss = self.criterion(out, gt)
-        
-        # acc = self.accuracy(out, gt)
-        # self.log("val/acc", acc)
+        self.log("val/backbone_acc", self.accuracy(pred_y, gt))
+
+        # self.log("val/acc", acc_y2)
+        # # if self.train_component == 'att':
+        # #     acc_y1 = self.accuracy(y1, gt)
+        # #     self.log("val/acc", acc_y1)
+        # # elif self.train_component == 'vae':
+
         return loss
     
     def test_step(self, batch, batch_idx):
@@ -228,13 +218,13 @@ def parse_args():
     parser.add_argument('--is_distributed', action='store_true', help="Enable distributed training")
     parser.add_argument('--is_transfer', action='store_true', help="Enable distributed training")
     parser.add_argument('--load_checkpoints_path', type=str, default="./logs/fine_tune_resnet50/version_8/checkpoints/best_model.ckpt", help="load trained cpkt")
-    # parser.add_argument('--train_component', type=str, default="att", help="trained component")
+    parser.add_argument('--backbone_forzen', action='store_true', help="Disable Training backbone")
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
-    logger_name = f"refine_resnet{args.resnet_scale}"
+    logger_name = f"refine_resnet{args.resnet_scale}-att"
     logger = CSVLogger(args.checkpoint_dir, name=logger_name)
 
     checkpoint_callback = ModelCheckpoint(
@@ -246,7 +236,7 @@ def main():
     )
 
     dm = StanfordCarsDataRefineModule(batch_size=args.batch_size, train_dir=args.train_dir, test_dir=args.test_dir, input_size=args.input_size)
-    model = LitModel(num_classes=args.num_classes, transfer=args.is_transfer, learning_rate=args.learning_rate, resnet_scale=args.resnet_scale,train_component=None)
+    model = LitModel(num_classes=args.num_classes, transfer=args.is_transfer, learning_rate=args.learning_rate, resnet_scale=args.resnet_scale,backbone_forzen=args.backbone_forzen)
     if args.is_distributed:
         trainer = pl.Trainer(logger=logger, max_epochs=args.max_epochs, accelerator="gpu",callbacks=[checkpoint_callback],strategy="ddp")
     else:
@@ -258,7 +248,11 @@ if __name__ == "__main__":
     main()
 
 ## 
-## python training-refine-block_ann.py --batch_size 32 --learning_rate 1e-3 --input_size 300 --train_dir '../data/cars/train' --test_dir '../data/cars/test' --resnet_scale '50' --max_epochs 200  --checkpoint_dir 'logs' --num_classes 196 --is_distributed  --is_transfer --load_checkpoints_path "./logs/fine_tune_resnet50/version_8/checkpoints/best_model.ckpt" 
+## python training-refine-block1_ann.py --batch_size 32 --learning_rate 1e-3 --input_size 300 --train_dir '../data/cars/train' --test_dir '../data/cars/test' --resnet_scale '50' --max_epochs 200  --checkpoint_dir 'logs' --num_classes 196 --is_distributed  --is_transfer --load_checkpoints_path "./logs/fine_tune_resnet50/version_8/checkpoints/best_model.ckpt" 
 ##--train_component 'att'
 
 ## python training-refine-block_ann.py --batch_size 32 --learning_rate 1e-3 --input_size 300 --train_dir '../data/cars/train' --test_dir '../data/cars/test' --resnet_scale '50' --max_epochs 200  --checkpoint_dir 'logs' --num_classes 196 --is_distributed  --is_transfer --load_checkpoints_path "./logs/fine_tune_resnet50/version_8/checkpoints/best_model.ckpt" --train_component 'att'
+
+## python training-refine-block1_ann.py --batch_size 32 --learning_rate 1e-3 --input_size 300 --train_dir '../data/cars/train' --test_dir '../data/cars/test' --resnet_scale '50' --max_epochs 200  --checkpoint_dir 'logs' --num_classes 196 --is_distributed  --is_transfer --load_checkpoints_path "./logs/fine_tune_resnet50/version_8/checkpoints/best_model.ckpt"
+
+## nohup python training-refine-block1_ann.py --batch_size 32 --learning_rate 1e-3 --input_size 300 --train_dir '../data/cars/train' --test_dir '../data/cars/test' --resnet_scale '50' --max_epochs 100 --checkpoint_dir 'logs' --num_classes 196 --is_distributed --is_transfer --load_checkpoints_path "./logs/fine_tune_resnet50/version_8/checkpoints/best_model.ckpt" > logs/run_output.log 2>&1 &
