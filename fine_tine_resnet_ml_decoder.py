@@ -39,7 +39,7 @@ from losses import ASLSingleLabel
 
 ## fine-tune resnet
 class LitModel(pl.LightningModule):
-    def __init__(self, num_classes, learning_rate=0.1, transfer=True,resnet_scale:str = '50',decoder_embedding=768,num_of_groups=-1):
+    def __init__(self, num_classes, learning_rate=0.1, transfer=True,resnet_scale:str = '50',decoder_embedding=768,num_of_groups=-1,train_loader_len = 100):
         super().__init__()
         
         self.save_hyperparameters()
@@ -67,7 +67,7 @@ class LitModel(pl.LightningModule):
                 self.feature_extractor = models.resnet34(weights=models.ResNet34_Weights.IMAGENET1K_V1)
             else:
                 self.feature_extractor = models.resnet34(weights=None)
-        
+        self.train_loader_len = train_loader_len
         # in_features = self.feature_extractor.fc.in_features
         # self.feature_extractor.fc = nn.Linear(in_features, num_classes)
         # self.classifier = nn.Identity()
@@ -145,7 +145,7 @@ class LitModel(pl.LightningModule):
         optimizer = optim.Adam(self.parameters(), lr=self.learning_rate)
         # scheduler = StepLR(optimizer, step_size=30, gamma=0.1)
         # scheduler = CosineAnnealingLR(optimizer, T_max=self.trainer.max_epochs, eta_min=0)
-        steps_per_epoch = len(self.train_dataloader())
+        steps_per_epoch = self.train_loader_len
         scheduler = OneCycleLR(optimizer, max_lr=self.learning_rate, steps_per_epoch=steps_per_epoch, epochs=self.trainer.max_epochs,
                                         pct_start=0.2)
         return {
@@ -188,9 +188,9 @@ def main():
     dm = StanfordCarsDataModule(batch_size=args.batch_size, train_dir=args.train_dir, test_dir=args.test_dir, input_size=args.input_size)
     model = LitModel(num_classes=args.num_classes, transfer=args.is_transfer, learning_rate=args.learning_rate, resnet_scale=args.resnet_scale)
     if args.is_distributed:
-        trainer = pl.Trainer(logger=logger, max_epochs=args.max_epochs, accelerator="gpu",callbacks=[checkpoint_callback],strategy="ddp")
+        trainer = pl.Trainer(logger=logger, max_epochs=args.max_epochs, accelerator="gpu",callbacks=[checkpoint_callback],strategy="ddp",train_loader_len=len(dm.train_dataloader))
     else:
-        trainer = pl.Trainer(logger=logger, max_epochs=args.max_epochs, accelerator="gpu",callbacks=[checkpoint_callback])
+        trainer = pl.Trainer(logger=logger, max_epochs=args.max_epochs, accelerator="gpu",callbacks=[checkpoint_callback],train_loader_len=len(dm.train_dataloader))
     trainer.fit(model, dm)
     print("end....")
 
