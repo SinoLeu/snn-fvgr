@@ -22,7 +22,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 from torch.utils.data import random_split, DataLoader
-from torch.optim.lr_scheduler import CosineAnnealingLR
+from torch.optim.lr_scheduler import CosineAnnealingLR,OneCycleLR
 from torchmetrics import Accuracy
 
 from torchvision import transforms
@@ -142,9 +142,12 @@ class LitModel(pl.LightningModule):
     
     def configure_optimizers(self):
         # return torch.optim.SGD(self.parameters(), lr=self.learning_rate)
-        optimizer = optim.AdamW(self.parameters(), lr=self.learning_rate)
+        optimizer = optim.Adam(self.parameters(), lr=self.learning_rate)
         # scheduler = StepLR(optimizer, step_size=30, gamma=0.1)
-        scheduler = CosineAnnealingLR(optimizer, T_max=self.trainer.max_epochs, eta_min=0)
+        # scheduler = CosineAnnealingLR(optimizer, T_max=self.trainer.max_epochs, eta_min=0)
+        steps_per_epoch = len(self.train_dataloader)
+        scheduler = OneCycleLR(optimizer, max_lr=self.learning_rate, steps_per_epoch=steps_per_epoch, epochs=self.trainer.max_epochs,
+                                        pct_start=0.2)
         return {
             'optimizer': optimizer,
             'lr_scheduler': scheduler,
