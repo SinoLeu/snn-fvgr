@@ -141,7 +141,7 @@ class LitModel(pl.LightningModule):
     
     def configure_optimizers(self):
         # return torch.optim.SGD(self.parameters(), lr=self.learning_rate)
-        optimizer = optim.Adama(self.parameters(), lr=self.learning_rate)
+        optimizer = optim.AdamW(self.parameters(), lr=self.learning_rate)
         # scheduler = StepLR(optimizer, step_size=30, gamma=0.1)
         scheduler = CosineAnnealingLR(optimizer, T_max=self.trainer.max_epochs, eta_min=0)
         return {
