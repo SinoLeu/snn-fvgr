@@ -34,6 +34,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import CSVLogger
 from utils.pl_data_loader import StanfordCarsDataModule
 from models.ml_decoder import add_ml_decoder_head
+from losses import ASLSingleLabel
 ## python fine-tine-resnet_ann.py --batch_size 64 --learning_rate 0.1 --input_size 300 --train_dir '../data/cars/train' --test_dir '../data/cars/test' --resnet_scale '50' --max_epochs 150  --checkpoint_dir 'logs' --num_classes 196 --is_distributed  --is_transfer
 
 ## fine-tune resnet
@@ -70,7 +71,7 @@ class LitModel(pl.LightningModule):
         # in_features = self.feature_extractor.fc.in_features
         # self.feature_extractor.fc = nn.Linear(in_features, num_classes)
         # self.classifier = nn.Identity()
-        self.criterion = nn.CrossEntropyLoss()
+        self.criterion = ASLSingleLabel()
         self.accuracy = Accuracy(task="multiclass",num_classes=self.num_classes)
         self.feature_extractor = add_ml_decoder_head(self.feature_extractor,num_classes=num_classes,num_of_groups=num_of_groups,decoder_embedding=decoder_embedding)
     # returns the size of the output tensor going into the Linear layer from the conv block.
