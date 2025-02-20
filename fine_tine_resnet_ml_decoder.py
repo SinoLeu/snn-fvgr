@@ -145,7 +145,7 @@ class LitModel(pl.LightningModule):
         optimizer = optim.Adam(self.parameters(), lr=self.learning_rate)
         # scheduler = StepLR(optimizer, step_size=30, gamma=0.1)
         # scheduler = CosineAnnealingLR(optimizer, T_max=self.trainer.max_epochs, eta_min=0)
-        steps_per_epoch = len(self.train_dataloader)
+        steps_per_epoch = len(self.train_dataloader())
         scheduler = OneCycleLR(optimizer, max_lr=self.learning_rate, steps_per_epoch=steps_per_epoch, epochs=self.trainer.max_epochs,
                                         pct_start=0.2)
         return {
