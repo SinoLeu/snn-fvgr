@@ -141,7 +141,7 @@ class LitModel(pl.LightningModule):
     
     def configure_optimizers(self):
         # return torch.optim.SGD(self.parameters(), lr=self.learning_rate)
-        optimizer = optim.SGD(self.parameters(), lr=self.learning_rate)
+        optimizer = optim.Adama(self.parameters(), lr=self.learning_rate)
         # scheduler = StepLR(optimizer, step_size=30, gamma=0.1)
         scheduler = CosineAnnealingLR(optimizer, T_max=self.trainer.max_epochs, eta_min=0)
         return {
@@ -195,3 +195,5 @@ if __name__ == "__main__":
 
 
 ## python fine_tine_resnet_ml_decoder.py --batch_size 64 --learning_rate 0.1 --input_size 300 --train_dir '../data/cars/train' --test_dir '../data/cars/test' --resnet_scale '50' --max_epochs 200  --checkpoint_dir 'logs' --num_classes 196 --is_distributed  --is_transfer
+
+## python fine_tine_resnet_ml_decoder.py --batch_size 64 --learning_rate 0.3 --input_size 300 --train_dir '../data/cars/train' --test_dir '../data/cars/test' --resnet_scale '50' --max_epochs 200  --checkpoint_dir 'logs' --num_classes 196 --is_distributed  --is_transfer
