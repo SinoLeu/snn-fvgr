@@ -144,10 +144,10 @@ class LitModel(pl.LightningModule):
         # return torch.optim.SGD(self.parameters(), lr=self.learning_rate)
         optimizer = optim.Adam(self.parameters(), lr=self.learning_rate)
         # scheduler = StepLR(optimizer, step_size=30, gamma=0.1)
-        # scheduler = CosineAnnealingLR(optimizer, T_max=self.trainer.max_epochs, eta_min=0)
-        steps_per_epoch = self.train_loader_len
-        scheduler = OneCycleLR(optimizer, max_lr=self.learning_rate, steps_per_epoch=steps_per_epoch, epochs=self.trainer.max_epochs,
-                                        pct_start=0.2)
+        scheduler = CosineAnnealingLR(optimizer, T_max=self.trainer.max_epochs, eta_min=0)
+        # steps_per_epoch = self.train_loader_len
+        # scheduler = OneCycleLR(optimizer, max_lr=self.learning_rate, steps_per_epoch=steps_per_epoch, epochs=self.trainer.max_epochs,
+        #                                 pct_start=0.2)
         return {
             'optimizer': optimizer,
             'lr_scheduler': scheduler,
@@ -201,4 +201,4 @@ if __name__ == "__main__":
 
 ## python fine_tine_resnet_ml_decoder.py --batch_size 64 --learning_rate 0.1 --input_size 300 --train_dir '../data/cars/train' --test_dir '../data/cars/test' --resnet_scale '50' --max_epochs 200  --checkpoint_dir 'logs' --num_classes 196 --is_distributed  --is_transfer
 
-## python fine_tine_resnet_ml_decoder.py --batch_size 64 --learning_rate 0.3 --input_size 300 --train_dir '../data/cars/train' --test_dir '../data/cars/test' --resnet_scale '50' --max_epochs 200  --checkpoint_dir 'logs' --num_classes 196 --is_distributed  --is_transfer
+## python fine_tine_resnet_ml_decoder.py --batch_size 64 --learning_rate 0.1 --input_size 300 --train_dir '../data/cars/train' --test_dir '../data/cars/test' --resnet_scale '50' --max_epochs 200  --checkpoint_dir 'logs' --num_classes 196 --is_distributed  --is_transfer
