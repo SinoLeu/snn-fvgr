@@ -39,7 +39,7 @@ from losses import ASLSingleLabel
 
 ## fine-tune resnet
 class LitModel(pl.LightningModule):
-    def __init__(self, num_classes, learning_rate=0.1, transfer=True,resnet_scale:str = '50',decoder_embedding=768,num_of_groups=-1,train_loader_len = 100):
+    def __init__(self, num_classes, learning_rate=0.1, transfer=True,resnet_scale:str = '50',decoder_embedding=768,num_of_groups=-1):
         super().__init__()
         
         self.save_hyperparameters()
@@ -67,7 +67,7 @@ class LitModel(pl.LightningModule):
                 self.feature_extractor = models.resnet34(weights=models.ResNet34_Weights.IMAGENET1K_V1)
             else:
                 self.feature_extractor = models.resnet34(weights=None)
-        self.train_loader_len = train_loader_len
+        # self.train_loader_len = train_loader_len
         # in_features = self.feature_extractor.fc.in_features
         # self.feature_extractor.fc = nn.Linear(in_features, num_classes)
         # self.classifier = nn.Identity()
@@ -186,8 +186,7 @@ def main():
     )
 
     dm = StanfordCarsDataModule(batch_size=args.batch_size, train_dir=args.train_dir, test_dir=args.test_dir, input_size=args.input_size)
-    dm.setup()
-    model = LitModel(num_classes=args.num_classes, transfer=args.is_transfer, learning_rate=args.learning_rate, resnet_scale=args.resnet_scale,train_loader_len=len(dm.train_dataloader()))
+    model = LitModel(num_classes=args.num_classes, transfer=args.is_transfer, learning_rate=args.learning_rate, resnet_scale=args.resnet_scale)
     if args.is_distributed:
         trainer = pl.Trainer(logger=logger, max_epochs=args.max_epochs, accelerator="gpu",callbacks=[checkpoint_callback],strategy="ddp")
     else:
