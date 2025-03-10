@@ -149,9 +149,10 @@ def add_ml_decoder_head(model, num_classes=-1, num_of_groups=-1, decoder_embeddi
         num_classes = model.num_classes
     # num_features = model.num_features
     num_features = model.fc.in_features
+    # print(num_features)
     if hasattr(model, 'avgpool') and hasattr(model, 'fc'):  # resnet50
         model.avgpool = nn.Identity()
-        # model.flatten_layer = nn.Identity()
+        model.flatten_layer = nn.Identity()
         del model.fc
         model.fc = MLDecoder(num_classes=num_classes, initial_num_features=num_features, num_of_groups=num_of_groups,
                              decoder_embedding=decoder_embedding, zsl=zsl)

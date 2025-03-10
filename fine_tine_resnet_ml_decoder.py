@@ -39,7 +39,7 @@ from losses import ASLSingleLabel
 
 ## fine-tune resnet
 class LitModel(pl.LightningModule):
-    def __init__(self, num_classes, learning_rate=0.1, transfer=True,resnet_scale:str = '50',decoder_embedding=768,num_of_groups=-1):
+    def __init__(self, num_classes, learning_rate=0.1, transfer=True,resnet_scale:str = '50',decoder_embedding=1536,num_of_groups=-1):
         super().__init__()
         
         self.save_hyperparameters()
@@ -71,7 +71,7 @@ class LitModel(pl.LightningModule):
         # in_features = self.feature_extractor.fc.in_features
         # self.feature_extractor.fc = nn.Linear(in_features, num_classes)
         # self.classifier = nn.Identity()
-        self.criterion = ASLSingleLabel()
+        self.criterion = nn.CrossEntropyLoss()
         self.accuracy = Accuracy(task="multiclass",num_classes=self.num_classes)
         self.feature_extractor = add_ml_decoder_head(self.feature_extractor,num_classes=num_classes,num_of_groups=num_of_groups,decoder_embedding=decoder_embedding)
     # returns the size of the output tensor going into the Linear layer from the conv block.
@@ -142,7 +142,7 @@ class LitModel(pl.LightningModule):
     
     def configure_optimizers(self):
         # return torch.optim.SGD(self.parameters(), lr=self.learning_rate)
-        optimizer = optim.Adam(self.parameters(), lr=self.learning_rate)
+        optimizer = optim.SGD(self.parameters(), lr=self.learning_rate)
         # scheduler = StepLR(optimizer, step_size=30, gamma=0.1)
         scheduler = CosineAnnealingLR(optimizer, T_max=self.trainer.max_epochs, eta_min=0)
         # steps_per_epoch = self.train_loader_len
@@ -196,6 +196,9 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+## python fine_tine_resnet_ml_decoder.py --batch_size 64 --learning_rate 0.1 --input_size 300 --train_dir '../data/cars/train' --test_dir '../data/cars/test' --resnet_scale '50' --max_epochs 200  --checkpoint_dir 'logs' --num_classes 196 --is_distributed  --is_transfer
 
 
 ## python fine_tine_resnet_ml_decoder.py --batch_size 64 --learning_rate 0.1 --input_size 300 --train_dir '../data/cars/train' --test_dir '../data/cars/test' --resnet_scale '50' --max_epochs 200  --checkpoint_dir 'logs' --num_classes 196 --is_distributed  --is_transfer
