@@ -33,7 +33,7 @@ import torchvision.models as models
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import CSVLogger
 from utils.pl_data_loader import StanfordCarsDataModule
-from models.ml_decoder import add_ml_decoder_head
+from models.ml_decoder import add_ml_decoder_head,add_linear_head
 from losses import ASLSingleLabel
 ## python fine-tine-resnet_ann.py --batch_size 64 --learning_rate 0.1 --input_size 300 --train_dir '../data/cars/train' --test_dir '../data/cars/test' --resnet_scale '50' --max_epochs 150  --checkpoint_dir 'logs' --num_classes 196 --is_distributed  --is_transfer
 
@@ -67,13 +67,11 @@ class LitModel(pl.LightningModule):
                 self.feature_extractor = models.resnet34(weights=models.ResNet34_Weights.IMAGENET1K_V1)
             else:
                 self.feature_extractor = models.resnet34(weights=None)
-        # self.train_loader_len = train_loader_len
-        # in_features = self.feature_extractor.fc.in_features
-        # self.feature_extractor.fc = nn.Linear(in_features, num_classes)
-        # self.classifier = nn.Identity()
+
         self.criterion = nn.CrossEntropyLoss()
         self.accuracy = Accuracy(task="multiclass",num_classes=self.num_classes)
-        self.feature_extractor = add_ml_decoder_head(self.feature_extractor,num_classes=num_classes,num_of_groups=num_of_groups,decoder_embedding=decoder_embedding)
+        self.feature_extractor = nn.Linear()
+        self.feature_extractor = add_linear_head(self.feature_extractor,num_classes=num_classes)
     # returns the size of the output tensor going into the Linear layer from the conv block.
     def _get_conv_output(self, shape):
         batch_size = 1
@@ -86,14 +84,11 @@ class LitModel(pl.LightningModule):
     # returns the feature tensor from the conv block
     def _forward_features(self, x):
         x = self.feature_extractor(x)
-        # print(x.shape)
         return x
     
     # will be used during inference
     def forward(self, x):
-       x = self._forward_features(x)
-
-       
+       x = self._forward_features(x)       
        return x
     
     def training_step(self, batch):
@@ -198,9 +193,6 @@ if __name__ == "__main__":
     main()
 
 
+## python fine_tine_resnet_ml_decoder.py --batch_size 64 --learning_rate 0.1 --input_size 300 --train_dir '../data/cars/train' --test_dir '../data/cars/test' --resnet_scale '101' --max_epochs 100  --checkpoint_dir 'logs' --num_classes 196 --is_distributed  --is_transfer  >> ./output.log 2>&1
 ## python fine_tine_resnet_ml_decoder.py --batch_size 64 --learning_rate 0.1 --input_size 300 --train_dir '../data/cars/train' --test_dir '../data/cars/test' --resnet_scale '50' --max_epochs 200  --checkpoint_dir 'logs' --num_classes 196 --is_distributed  --is_transfer
-
-
-## python fine_tine_resnet_ml_decoder.py --batch_size 64 --learning_rate 0.1 --input_size 300 --train_dir '../data/cars/train' --test_dir '../data/cars/test' --resnet_scale '50' --max_epochs 200  --checkpoint_dir 'logs' --num_classes 196 --is_distributed  --is_transfer
-
 ## python fine_tine_resnet_ml_decoder.py --batch_size 64 --learning_rate 0.1 --input_size 300 --train_dir '../data/cars/train' --test_dir '../data/cars/test' --resnet_scale '50' --max_epochs 200  --checkpoint_dir 'logs' --num_classes 196 --is_distributed  --is_transfer

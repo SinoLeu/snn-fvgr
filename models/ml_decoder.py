@@ -144,6 +144,15 @@ def _get_clones(module, N):
     # FIXME: copy.deepcopy() is not defined on nn.module
     return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
 
+def add_linear_head(model, num_classes=-1):
+
+    if num_classes == -1:
+        num_classes = model.num_classes
+    num_features = model.fc.in_features
+    model.fc = nn.Linear(num_features,num_classes)
+    
+    
+    
 def add_ml_decoder_head(model, num_classes=-1, num_of_groups=-1, decoder_embedding=768, zsl=0):
     if num_classes == -1:
         num_classes = model.num_classes
