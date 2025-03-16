@@ -10,7 +10,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torchvision import transforms
 from torchvision.datasets.folder import ImageFolder
-from torchvision.models import resnet50
+# from torchvision.models import resnet50
 from tqdm import tqdm
 
 from utils.label_smoothing import LabelSmoothingLoss
@@ -106,11 +106,12 @@ train_loader = DataLoader(
     train_set, batch_size=batch_size, shuffle=True, num_workers=num_workers
 )
 
-
+import timm
 ##### Model settings
-net = resnet50(
-    pretrained=True
-)  # to use more models, see https://pytorch.org/vision/stable/models.html
+# net = resnet50(
+#     pretrained=True
+# )  # to use more models, see https://pytorch.org/vision/stable/models.html
+net = timm.create_model("resnet50.a1_in1k", pretrained=True)
 net.fc = nn.Linear(
     net.fc.in_features, nb_class
 )  # set fc layer of model with exact class number of current dataset
