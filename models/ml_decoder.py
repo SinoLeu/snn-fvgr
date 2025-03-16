@@ -159,8 +159,8 @@ def add_ml_decoder_head(model, num_classes=-1, num_of_groups=-1, decoder_embeddi
     # num_features = model.num_features
     num_features = model.fc.in_features
     # print(num_features)
-    if hasattr(model, 'avgpool') and hasattr(model, 'fc'):  # resnet50
-        model.avgpool = nn.Identity()
+    if hasattr(model, 'global_pool') and hasattr(model, 'fc'):  # resnet50
+        model.global_pool = nn.Identity()
         model.flatten_layer = nn.Identity()
         del model.fc
         model.fc = MLDecoder(num_classes=num_classes, initial_num_features=num_features, num_of_groups=num_of_groups,
@@ -265,6 +265,7 @@ class MLDecoder(nn.Module):
         # non-learnable queries
         if not zsl:
             query_embed = nn.Embedding(embed_len_decoder, decoder_embedding)
+            # query_embed.requires_grad_(True)
             query_embed.requires_grad_(False)
         else:
             query_embed = None
@@ -302,6 +303,7 @@ class MLDecoder(nn.Module):
         self.test_wordvecs = None
 
     def forward(self, x):
+        # print(x.shape)
         # print(x.shape)
         if len(x.shape) == 4:  # [bs,2048, 7,7]
             embedding_spatial = x.flatten(2).transpose(1, 2)

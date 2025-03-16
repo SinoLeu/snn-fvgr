@@ -18,7 +18,8 @@ class StanfordCarsDataModule(pl.LightningDataModule):
 
         # Augmentation policy for training set
         self.augmentation = transforms.Compose([
-              transforms.RandomResizedCrop(size=self.input_size, scale=(0.8, 1.0)),
+              transforms.Resize((512, 512)),
+              transforms.RandomCrop(self.input_size, padding=8),
               transforms.RandomRotation(degrees=15),
               transforms.RandomHorizontalFlip(),
               transforms.CenterCrop(size=self.input_size),
@@ -27,7 +28,7 @@ class StanfordCarsDataModule(pl.LightningDataModule):
         ])
         # Preprocessing steps applied to validation and test set.
         self.transform = transforms.Compose([
-            transforms.Resize(self.input_size),
+            transforms.Resize((512, 512)),
             transforms.CenterCrop(self.input_size),
             transforms.ToTensor(),
             transforms.Normalize([0.485, 0.456, 0.406],[0.229, 0.224, 0.225])

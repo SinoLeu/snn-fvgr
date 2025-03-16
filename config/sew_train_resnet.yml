@@ -1,0 +1,15 @@
+
+env_train_name: 'sew_dirct_train'
+batch_size: 8
+learning_rate: 0.1
+input_size: 448
+train_dir: "../data/cars/train"
+test_dir: "../data/cars/test"
+resnet_scale: "50"
+max_epochs: 200
+checkpoint_dir: "logs"
+num_classes: 196
+is_distributed: true
+is_transfer: true
+time_step: 4
+weight_decay: 0.00001

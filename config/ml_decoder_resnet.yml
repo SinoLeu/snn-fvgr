@@ -1,0 +1,15 @@
+# python fine_tine_resnet_ml_decoder.py --batch_size 64 --learning_rate 0.1 --input_size 300 
+## --train_dir '../data/cars/train' --test_dir '../data/cars/test'
+## --resnet_scale '50' --max_epochs 100  --checkpoint_dir 'logs' --num_classes 196 --is_distributed  --is_transfer
+
+batch_size: 32
+learning_rate: 0.1
+input_size: 448
+train_dir: "../data/cars/train"
+test_dir: "../data/cars/test"
+resnet_scale: "50"
+max_epochs: 300
+checkpoint_dir: "logs"
+num_classes: 196
+is_distributed: true
+is_transfer: true
